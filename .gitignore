@@ -10,5 +10,4 @@ outputs/
 *.sqlite
 .ipynb_checkpoints
 .DS_Store
-*.pth
-models/
+*.pthmodels/

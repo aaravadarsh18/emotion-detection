@@ -2,8 +2,6 @@
 
 Project: TF-IDF + Logistic Regression baseline, TweetEval benchmark, and advanced analyses.
 
-## Week 1 - Setup & EDA
-
 ### Install
 1. Create virtualenv (recommended)
    python -m venv .venv

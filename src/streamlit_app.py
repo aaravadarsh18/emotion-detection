@@ -1,6 +1,6 @@
 # src/streamlit_app.py
-# Clean Streamlit UI — shows predicted label + probability distribution bar chart
-# Run from project root: streamlit run src/streamlit_app.py
+# Streamlit UI with Predict tab and Model Insights tab (reads outputs and top features).
+# Run: streamlit run src/streamlit_app.py
 
 import sys
 import os
@@ -9,35 +9,35 @@ import joblib
 import json
 import numpy as np
 import pandas as pd
+import streamlit as st
 
-# Ensure project root on sys.path so "src" imports work
+# ensure root on path
 PROJECT_ROOT = Path(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-try:
-    import streamlit as st
-except Exception as e:
-    print("Streamlit not installed. Install it: python3 -m pip install streamlit")
-    raise
-
-# Try import preprocessing
+# Preprocessing
 try:
     from src.preprocessing import preprocess_tweet
 except Exception as e:
     preprocess_tweet = None
-    preprocess_import_error = e
+    preprocess_error = e
 else:
-    preprocess_import_error = None
+    preprocess_error = None
 
-# Paths
+# Model files and outputs
 MODEL_PIPELINE_PATH = PROJECT_ROOT / "models" / "pipeline_full.joblib"
 MODEL_CLF_PATH = PROJECT_ROOT / "models" / "logreg_model.joblib"
 VEC_PATH = PROJECT_ROOT / "models" / "tfidf_vectorizer.joblib"
-REPORT_JSON = PROJECT_ROOT / "outputs" / "classification_report_test.json"
+OUT_DIR = PROJECT_ROOT / "outputs"
+F1_PNG = OUT_DIR / "f1_per_emotion.png"
+TOP_FEATS_CSV = OUT_DIR / "top_features.csv"
+REPORT_JSON = OUT_DIR / "classification_report_test.json"
 
-# Load pipeline or fallback
-pipeline, clf, vec = None, None, None
+# Load pipeline/model
+pipeline = None
+clf = None
+vec = None
 try:
     if MODEL_PIPELINE_PATH.exists():
         pipeline = joblib.load(MODEL_PIPELINE_PATH)
@@ -46,134 +46,116 @@ try:
             vec = pipeline.named_steps.get("tfidf", None)
         else:
             clf = pipeline
-            vec = None
 except Exception as e:
-    print("Could not load pipeline:", e)
-
+    pipeline = None
 if clf is None:
     try:
         if MODEL_CLF_PATH.exists():
             clf = joblib.load(MODEL_CLF_PATH)
         if VEC_PATH.exists():
             vec = joblib.load(VEC_PATH)
-    except Exception as e:
-        print("Could not load model/vectorizer fallback:", e)
+    except Exception:
         clf, vec = None, None
 
-# Determine label names
-def load_label_names_from_report(report_path: Path):
-    if not report_path.exists():
-        return None
-    try:
-        with open(report_path, "r") as f:
+# labels from report or classifier
+def load_labels():
+    if REPORT_JSON.exists():
+        with open(REPORT_JSON, "r") as f:
             report = json.load(f)
-        return [k for k in report.keys() if k not in ("accuracy", "macro avg", "weighted avg")]
-    except Exception:
-        return None
+        labels = [k for k in report.keys() if k not in ("accuracy", "macro avg", "weighted avg")]
+        return labels
+    if clf is not None and hasattr(clf, "classes_"):
+        classes = clf.classes_
+        return [str(x) for x in classes]
+    return []
 
-label_names = None
-if clf is not None and hasattr(clf, "classes_"):
-    classes = clf.classes_
-    if all(isinstance(c, str) for c in classes):
-        label_names = list(classes)
-    elif all(isinstance(c, (bytes, bytearray)) for c in classes):
-        label_names = [c.decode("utf-8") for c in classes]
-    else:
-        label_names = load_label_names_from_report(REPORT_JSON) or [str(c) for c in classes]
-else:
-    label_names = load_label_names_from_report(REPORT_JSON) or []
+labels = load_labels()
 
-# -------------------------
-# Streamlit UI layout
-# -------------------------
+# Streamlit layout
 st.set_page_config(page_title="Emotion Detection", layout="wide")
 st.title("Emotion Detection")
 
-# Top-level layout: left main column, right info column
-left_col, right_col = st.columns([3, 1])
+tab1, tab2 = st.tabs(["Predict", "Model Insights"])
 
-with left_col:
+with tab1:
     st.subheader("Input")
-    text = st.text_area("Enter text to classify", value="I am so happy today! 😄", height=150)
-
-    # Action buttons
-    btn_col1, btn_col2 = st.columns([1, 1])
-    with btn_col1:
+    text = st.text_area("Enter text", value="I am so happy today! 😄", height=140)
+    c1, c2 = st.columns([1,1])
+    with c1:
         do_preprocess = st.button("Preprocess")
-    with btn_col2:
+    with c2:
         do_predict = st.button("Predict")
 
-    # Output area
     st.subheader("Result")
-    result_container = st.container()
-    chart_container = st.container()
+    result = st.container()
+    chart_area = st.container()
 
-with right_col:
-    st.subheader("Model status")
-    if pipeline is not None:
-        st.write("Loaded: pipeline_full.joblib")
-    elif clf is not None and vec is not None:
-        st.write("Loaded: model + vectorizer")
-    else:
-        st.write("No model loaded")
-    if label_names:
-        st.write("Labels:", ", ".join(label_names))
-    else:
-        st.write("Label names: unknown")
-    st.markdown("---")
-    st.write("Files checked:")
-    st.write(f"- pipeline_full.joblib: {'yes' if MODEL_PIPELINE_PATH.exists() else 'no'}")
-    st.write(f"- logreg_model.joblib: {'yes' if MODEL_CLF_PATH.exists() else 'no'}")
-    st.write(f"- tfidf_vectorizer.joblib: {'yes' if VEC_PATH.exists() else 'no'}")
-    st.write(f"- classification_report_test.json: {'yes' if REPORT_JSON.exists() else 'no'}")
-    if preprocess_import_error:
-        with st.expander("Preprocessing import error"):
-            st.text(str(preprocess_import_error))
+    if do_preprocess:
+        if preprocess_tweet is None:
+            result.error("Preprocessing not available.")
+            if preprocess_error:
+                with result.expander("Import error"):
+                    result.text(str(preprocess_error))
+        else:
+            result.markdown("**Preprocessed**")
+            result.code(preprocess_tweet(text))
 
-# -------------------------
-# Actions
-# -------------------------
-if do_preprocess:
-    if preprocess_tweet is None:
-        result_container.error("Preprocessing function not available. Check src/preprocessing.py.")
-    else:
-        processed = preprocess_tweet(text)
-        result_container.markdown("**Preprocessed text:**")
-        result_container.code(processed)
-
-if do_predict:
-    if preprocess_tweet is None:
-        result_container.error("Cannot run prediction because preprocessing is unavailable.")
-    elif clf is None:
-        result_container.error("Model not loaded. Train model first and ensure models/ contains model files.")
-    else:
-        try:
+    if do_predict:
+        if preprocess_tweet is None:
+            result.error("Preprocessing not available.")
+        elif clf is None:
+            result.error("Model not loaded. Train and save models to models/first.")
+        else:
             processed = preprocess_tweet(text)
+            try:
+                if vec is not None:
+                    X = vec.transform([processed])
+                    probs = clf.predict_proba(X)[0]
+                else:
+                    probs = clf.predict_proba([processed])[0]
+            except Exception:
+                probs = None
 
-            # If vectorizer present
-            if vec is not None:
-                X = vec.transform([processed])
-                probs = clf.predict_proba(X)[0]
+            if probs is not None:
+                pred_idx = int(np.argmax(probs))
+                pred_label = labels[pred_idx] if pred_idx < len(labels) else str(pred_idx)
+                result.success(f"Predicted: **{pred_label}**")
+                # show probabilities as bar chart
+                prob_df = pd.DataFrame({"label": labels if labels else list(range(len(probs))), "prob": probs})
+                prob_df = prob_df.sort_values("prob", ascending=True)
+                chart_area.markdown("**Probability distribution**")
+                st.bar_chart(prob_df.set_index("label")["prob"])
             else:
-                # Try with pipeline or clf directly
-                probs = clf.predict_proba([processed])[0]
+                pred = clf.predict([processed])[0]
+                result.success(f"Predicted: **{pred}** (no probabilities)")
 
-            pred_idx = int(np.argmax(probs))
-            pred_label = label_names[pred_idx] if pred_idx < len(label_names) else str(pred_idx)
+with tab2:
+    st.subheader("Model Insights")
+    st.write("This page displays saved evaluation plots and top features per emotion (if available).")
 
-            # Show prediction
-            result_container.success(f"Predicted emotion: **{pred_label}**")
+    if F1_PNG.exists():
+        st.image(str(F1_PNG), caption="F1 per emotion (test)", use_column_width=False)
+    else:
+        st.info("F1 plot not found. Run src/evaluate_model.py to generate outputs/f1_per_emotion.png")
 
-            # Display bar chart for full probability distribution
-            labels = label_names if len(label_names) == len(probs) else [str(i) for i in range(len(probs))]
-            prob_df = pd.DataFrame({"Emotion": labels, "Probability": probs})
-            prob_df = prob_df.sort_values("Probability", ascending=True)
+    if TOP_FEATS_CSV.exists():
+        df_top = pd.read_csv(TOP_FEATS_CSV)
+        # Show top 5 features per label as a pivoted small table
+        grouped = df_top.groupby("label").head(5).reset_index(drop=True)
+        st.write("Top features (sample 5 per label):")
+        st.dataframe(grouped[["label", "feature", "weight"]].sort_values(["label","weight"], ascending=[True, False]).reset_index(drop=True))
+        with st.expander("Open full top features CSV"):
+            st.download_button("Download top_features.csv", data=TOP_FEATS_CSV.read_bytes(), file_name="top_features.csv")
+    else:
+        st.info("Top features file not found. Run src/feature_analysis.py to generate outputs/top_features.csv")
 
-            chart_container.markdown("**Probability distribution across emotions**")
-            st.bar_chart(prob_df.set_index("Emotion"))
-
-        except Exception as e:
-            result_container.error("Error during prediction. See console for details.")
-            print("Prediction error:", e)
-
-tab1, tab2 = st.tabs(["Predict", "Model Insights"])
+    # Show classification report summary
+    if REPORT_JSON.exists():
+        with open(REPORT_JSON, "r") as f:
+            rep = json.load(f)
+        if "macro avg" in rep:
+            st.metric("Macro F1 (test)", f"{rep['macro avg']['f1-score']:.3f}")
+        st.write("Classification report (test):")
+        st.json(rep)
+    else:
+        st.info("Classification report not found. Run the training script to generate outputs.")

@@ -2,11 +2,12 @@
 
 Requirements
 
-- Python 3.8 or newer
-- A POSIX shell (macOS zsh tested)
-- A virtual environment and the packages listed in `requirements.txt`
-
-Setup
+### Install
+1. Create virtualenv (recommended)
+   python -m venv .venv
+   source .venv/bin/activate
+2. Install requirements
+   pip install -r requirements.txt
 
 1. Create and activate a virtual environment:
 

@@ -159,3 +159,21 @@ with tab2:
         st.json(rep)
     else:
         st.info("Classification report not found. Run the training script to generate outputs.")
+
+tab1, tab2, tab3 = st.tabs(["Predict", "Model Insights", "About & Ethics"])
+
+with tab3:
+    st.subheader("About This Project")
+    st.markdown("""
+    **Emotion Detection in Social Media Posts**  
+    - Baseline: TF-IDF + Logistic Regression  
+    - Contextual Model: TweetEval RoBERTa-base  
+    - Dataset: TweetEval Emotion (CardiffNLP)
+    """)
+
+    st.subheader("Ethics & Bias")
+    ethics_path = PROJECT_ROOT / "docs" / "ethics.md"
+    if ethics_path.exists():
+        st.markdown(ethics_path.read_text())
+    else:
+        st.info("Ethics document not found (docs/ethics.md).")

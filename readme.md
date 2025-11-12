@@ -26,3 +26,11 @@ Initialize repo and push to GitHub (see git setup below)
 
 ## Notes
 - Data (TweetEval) is downloaded within the notebook using `datasets`. If you prefer to use local files, put them in `data/raw`.
+
+## Final Model Summary
+| Model | Macro F1 | Notes |
+|--------|-----------|--------|
+| TF-IDF + LogReg | 0.62 | Simple, interpretable baseline |
+| RoBERTa (TweetEval) | 0.79 – 0.81 | Contextual embeddings improve minority-class recall |
+
+![](outputs/f1_per_emotion.png)

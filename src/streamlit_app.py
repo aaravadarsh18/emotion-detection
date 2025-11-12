@@ -175,3 +175,5 @@ if do_predict:
         except Exception as e:
             result_container.error("Error during prediction. See console for details.")
             print("Prediction error:", e)
+
+tab1, tab2 = st.tabs(["Predict", "Model Insights"])

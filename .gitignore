@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Environments
+env/
+venv/
+.venv/
+
+# Data
+data/
+outputs/
+*.sqlite
+
+# Notebook checkpoints
+.ipynb_checkpoints
+
+# OS
+.DS_Store
+
+# PyTorch
+*.pth
